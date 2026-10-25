@@ -1,0 +1,30 @@
+name: Compilar APK
+
+# Se ejecuta solo cada vez que cambia el código, y también a mano desde la pestaña "Actions".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Compilar el APK
+        run: sh build-ci.sh
+
+      - name: Guardar el APK para descargarlo
+        uses: actions/upload-artifact@v4
+        with:
+          name: CarLauncher-APK
+          path: build/CarLauncher.apk
+          if-no-files-found: error

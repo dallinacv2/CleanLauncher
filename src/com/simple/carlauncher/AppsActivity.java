@@ -27,12 +27,18 @@ import java.util.List;
 
 public class AppsActivity extends Activity {
 
+    /** When present, tapping an app chooses it for that dock button instead of opening it. */
+    static final String EXTRA_PICK = "pick";
+
+    private String pickKey;
+
     private final List<ResolveInfo> apps = new ArrayList<>();
     private BaseAdapter adapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        pickKey = getIntent().getStringExtra(EXTRA_PICK);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -56,7 +62,7 @@ public class AppsActivity extends Activity {
         header.addView(back, new LinearLayout.LayoutParams(dp(52), dp(52)));
 
         TextView title = new TextView(this);
-        title.setText("Aplicaciones");
+        title.setText(pickKey == null ? "Aplicaciones" : "Elige la app para " + AppLinks.title(pickKey));
         title.setTextSize(26);
         title.setTextColor(Color.WHITE);
         title.setPadding(dp(18), 0, 0, 0);
@@ -80,6 +86,13 @@ public class AppsActivity extends Activity {
         grid.setAdapter(adapter);
         grid.setOnItemClickListener((parent, view, pos, id) -> {
             ResolveInfo ri = apps.get(pos);
+            if (pickKey != null) {
+                AppLinks.set(this, pickKey, ri.activityInfo.packageName);
+                android.widget.Toast.makeText(this, AppLinks.title(pickKey) + ": "
+                        + ri.loadLabel(getPackageManager()), android.widget.Toast.LENGTH_SHORT).show();
+                finish();
+                return;
+            }
             Intent i = new Intent(Intent.ACTION_MAIN);
             i.addCategory(Intent.CATEGORY_LAUNCHER);
             i.setComponent(new ComponentName(ri.activityInfo.packageName, ri.activityInfo.name));
@@ -87,6 +100,7 @@ public class AppsActivity extends Activity {
             startActivity(i);
         });
         grid.setOnItemLongClickListener((parent, view, pos, id) -> {
+            if (pickKey != null) return false;
             Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                     Uri.parse("package:" + apps.get(pos).activityInfo.packageName));
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

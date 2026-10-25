@@ -31,8 +31,6 @@ final class NowPlaying {
         void onNowPlayingChanged();
     }
 
-    private static final String LOCAL_PLAYER = "com.nwd.android.music.ui/.home_horizontalActivity";
-
     /** State reported by one source. */
     static final class Track {
         String title = "", artist = "";
@@ -247,12 +245,12 @@ final class NowPlaying {
     void open(Context c) {
         Source s = current();
         if (s == Source.BT) {
-            c.startActivity(new Intent(c, BtActivity.class));
+            AppLinks.open(c, AppLinks.BT);
         } else if (s == Source.APP && controller != null) {
             Intent i = c.getPackageManager().getLaunchIntentForPackage(controller.getPackageName());
             if (i != null) c.startActivity(i);
         } else {
-            Ui.launch(c, LOCAL_PLAYER);
+            AppLinks.open(c, AppLinks.MUSIC);
         }
     }
 

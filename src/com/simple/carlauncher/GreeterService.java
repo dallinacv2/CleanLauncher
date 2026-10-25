@@ -250,8 +250,7 @@ public class GreeterService extends Service {
     public static class BootReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context c, Intent i) {
-            c.startService(new Intent(c, GreeterService.class));
-            c.startService(new Intent(c, VolumeOverlay.class));
+            // Greeter and volume overlay only work on NWD radios, so they are not started here.
             c.startService(new Intent(c, Odometer.class));
         }
     }

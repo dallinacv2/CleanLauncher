@@ -24,14 +24,13 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
 
     private static final String NAME = "Darlin";
 
-    private static final String MAPS = "com.google.android.apps.maps/com.google.android.maps.MapsActivity";
-    private static final String EQ = "com.nwd.audioset/.home_horizontalActivity";
-    private static final String SETTINGS = "com.android.car.setting/.home_horizontalActivity";
+    // The car lights picture turns on at 19:00 and off at 06:30 (minutes since midnight).
+    private static final int LIGHTS_ON_MIN = 19 * 60;
+    private static final int LIGHTS_OFF_MIN = 6 * 60 + 30;
 
     private static final long WEATHER_EVERY_MS = 30 * 60 * 1000;
 
     private final Handler handler = new Handler();
-    private final RadioClient radio = new RadioClient();
     private NowPlaying nowPlaying;
 
     private TextView greeting, weatherTemp, weatherDesc, weatherCity, weatherExtra;
@@ -42,7 +41,8 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
     private GradientDrawable oilBg;
     private long lastWeatherFetch;
 
-    private TextView fmBand, fmFreq, fmUnit;
+    private TextView radioHint;
+    private boolean lightsOn;
     private ImageView art, playBtn;
     private TextView songSource, songTitle, songArtist;
 
@@ -61,7 +61,7 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         LinearLayout middle = new LinearLayout(this);
         middle.setOrientation(LinearLayout.VERTICAL);
         middle.addView(buildClockCard(), vweight(0.62f, 0));
-        middle.addView(buildFmCard(), vweight(1.38f, dp(12)));
+        middle.addView(buildRadioCard(), vweight(1.38f, dp(12)));
         cards.addView(middle, weight(1f, dp(12)));
 
         cards.addView(buildMusicCard(), weight(1.05f, dp(12)));
@@ -70,10 +70,7 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         root.addView(buildDock(), new LinearLayout.LayoutParams(-1, dp(84)));
         setContentView(root);
 
-        radio.bind(this);
         nowPlaying = NowPlaying.get(this);
-        startService(new Intent(this, VolumeOverlay.class));
-        startService(new Intent(this, GreeterService.class));
         startService(new Intent(this, Odometer.class));
     }
 
@@ -180,25 +177,30 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
     private final Runnable periodic = new Runnable() {
         public void run() {
             updateGreeting();
+            updateCarLights(false);
             fetchWeather(false);
             handler.postDelayed(this, 60 * 1000);
         }
     };
 
-    // ---------- Car lights (ILL wire) ----------
+    // ---------- Car lights (by time of day) ----------
 
-    private final android.content.BroadcastReceiver illReceiver = new android.content.BroadcastReceiver() {
-        @Override
-        public void onReceive(android.content.Context c, Intent i) {
-            android.util.Log.d("CarLights", "ILL broadcast extras=" + i.getExtras());
-            showCarLights(i.getByteExtra("extra_ill_state", (byte) 0) != 0);
+    /** Lights picture on from 19:00 until 06:30. */
+    private boolean lightsShouldBeOn() {
+        Calendar now = Calendar.getInstance();
+        int minutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+        return minutes >= LIGHTS_ON_MIN || minutes < LIGHTS_OFF_MIN;
+    }
+
+    private void updateCarLights(boolean instant) {
+        boolean on = lightsShouldBeOn();
+        if (instant) {
+            carLights.setAlpha(on ? 1f : 0f);
+            car.setAlpha(on ? 0f : 1f);
+        } else if (on != lightsOn) {
+            showCarLights(on);
         }
-    };
-
-    /** The kernel keeps the light state as bit 2 of mcu_no_source_device_state. */
-    private boolean carLightsOn() {
-        int state = android.provider.Settings.System.getInt(getContentResolver(), "mcu_no_source_device_state", 0);
-        return (state & 2) != 0;
+        lightsOn = on;
     }
 
     private void showCarLights(boolean on) {
@@ -258,68 +260,40 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         card.addView(oilInfo, olp);
 
         Ui.pressable(card, 0.97f);
-        card.setOnClickListener(v -> Ui.launch(this, SETTINGS));
+        card.setOnClickListener(v -> openSettings());
         return card;
     }
 
-    // ---------- FM ----------
+    // ---------- Radio shortcut ----------
 
-    private View buildFmCard() {
+    private View buildRadioCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER);
         card.setBackground(Ui.card(this));
 
-        LinearLayout head = new LinearLayout(this);
-        head.setGravity(Gravity.CENTER);
         ImageView radioIcon = new ImageView(this);
         radioIcon.setImageResource(R.drawable.ic_radio);
         radioIcon.setColorFilter(0xFFFF9F5A);
-        head.addView(radioIcon, new LinearLayout.LayoutParams(dp(22), dp(22)));
-        fmBand = Ui.text(this, "RADIO FM", 15, Color.WHITE);
-        fmBand.setPadding(dp(8), 0, 0, 0);
-        head.addView(fmBand);
-        card.addView(head);
+        card.addView(radioIcon, new LinearLayout.LayoutParams(dp(56), dp(56)));
 
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER);
-        row.addView(Ui.iconButton(this, R.drawable.ic_prev, 52, false, () -> stationStep(false)),
-                new LinearLayout.LayoutParams(dp(52), dp(52)));
-        fmFreq = Ui.text(this, "--.-", 50, Color.WHITE);
-        fmFreq.setTypeface(Typeface.DEFAULT_BOLD);
-        row.addView(fmFreq, new LinearLayout.LayoutParams(0, -2, 1f));
-        row.addView(Ui.iconButton(this, R.drawable.ic_next, 52, false, () -> stationStep(true)),
-                new LinearLayout.LayoutParams(dp(52), dp(52)));
-        row.setPadding(dp(12), dp(10), dp(12), 0);
-        card.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        TextView title = Ui.text(this, "Radio", 30, Color.WHITE);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setPadding(0, dp(8), 0, 0);
+        card.addView(title);
 
-        fmUnit = Ui.text(this, "MHz", 15, 0x99FFFFFF);
-        card.addView(fmUnit);
+        radioHint = Ui.text(this, "", 15, 0x99FFFFFF);
+        radioHint.setPadding(dp(12), dp(4), dp(12), 0);
+        card.addView(radioHint);
 
         Ui.pressable(card, 0.97f);
-        card.setOnClickListener(v -> startActivity(new Intent(this, RadioActivity.class)));
+        card.setOnClickListener(v -> AppLinks.open(this, AppLinks.RADIO));
+        card.setOnLongClickListener(v -> {
+            AppLinks.pick(this, AppLinks.RADIO);
+            return true;
+        });
         return card;
     }
-
-    private void stationStep(boolean next) {
-        radio.preset(next);
-        handler.postDelayed(this::updateRadio, 300);
-    }
-
-    private void updateRadio() {
-        RadioClient.Station st = radio.current();
-        if (st == null) return;
-        fmBand.setText(st.psName.isEmpty() ? "RADIO " + st.bandLabel() : st.bandLabel() + " · " + st.psName);
-        fmFreq.setText(st.frequencyLabel());
-        fmUnit.setText(st.isAm() ? "kHz" : "MHz");
-    }
-
-    private final Runnable radioPoll = new Runnable() {
-        public void run() {
-            updateRadio();
-            handler.postDelayed(this, 1000);
-        }
-    };
 
     // ---------- Music (any source) ----------
 
@@ -409,11 +383,9 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
     private View buildDock() {
         LinearLayout dock = new LinearLayout(this);
         dock.setGravity(Gravity.CENTER_VERTICAL);
-        dock.addView(dockIcon(R.drawable.ic_compass, () -> Ui.launch(this, MAPS)), weight(1f, 0));
-        dock.addView(dockIcon(R.drawable.ic_bluetooth,
-                () -> startActivity(new Intent(this, BtActivity.class))), weight(1f, 0));
-        dock.addView(dockIcon(R.drawable.ic_radio,
-                () -> startActivity(new Intent(this, RadioActivity.class))), weight(1f, 0));
+        dock.addView(dockIcon(R.drawable.ic_compass, AppLinks.NAV), weight(1f, 0));
+        dock.addView(dockIcon(R.drawable.ic_bluetooth, AppLinks.BT), weight(1f, 0));
+        dock.addView(dockIcon(R.drawable.ic_radio, AppLinks.RADIO), weight(1f, 0));
 
         FrameLayout center = new FrameLayout(this);
         RingView ring = new RingView(this);
@@ -422,14 +394,18 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         ring.setOnClickListener(v -> startActivity(new Intent(this, AppsActivity.class)));
         dock.addView(center, weight(1f, 0));
 
-        dock.addView(dockIcon(R.drawable.ic_w_moon,
-                () -> startActivity(new Intent(this, ScreenOffActivity.class))), weight(1f, 0));
-        dock.addView(dockIcon(R.drawable.ic_settings, () -> Ui.launch(this, EQ)), weight(1f, 0));
-        dock.addView(dockIcon(R.drawable.ic_gear, () -> Ui.launch(this, SETTINGS)), weight(1f, 0));
+        dock.addView(dockIcon(R.drawable.ic_music, AppLinks.MUSIC), weight(1f, 0));
+        dock.addView(dockIcon(R.drawable.ic_settings, AppLinks.EQ), weight(1f, 0));
+        dock.addView(dockIcon(R.drawable.ic_gear, this::openSettings, null), weight(1f, 0));
         return dock;
     }
 
-    private View dockIcon(int icon, Runnable action) {
+    /** Button that opens the app the user chose for it; long press chooses another app. */
+    private View dockIcon(int icon, String key) {
+        return dockIcon(icon, () -> AppLinks.open(this, key), () -> AppLinks.pick(this, key));
+    }
+
+    private View dockIcon(int icon, Runnable action, Runnable longAction) {
         FrameLayout f = new FrameLayout(this);
         ImageView iv = new ImageView(this);
         iv.setImageResource(icon);
@@ -438,7 +414,22 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         f.addView(iv, new FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER));
         Ui.pressable(iv, 0.85f);
         iv.setOnClickListener(v -> action.run());
+        if (longAction != null) {
+            iv.setOnLongClickListener(v -> {
+                longAction.run();
+                return true;
+            });
+        }
         return f;
+    }
+
+    private void openSettings() {
+        try {
+            startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Exception e) {
+            android.widget.Toast.makeText(this, "No disponible", android.widget.Toast.LENGTH_SHORT).show();
+        }
     }
 
     // ---------- Lifecycle & helpers ----------
@@ -449,16 +440,12 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         updateGreeting();
         updateOil();
         showWeather(Weather.cached(this));
-        registerReceiver(illReceiver, new android.content.IntentFilter("com.nwd.ACTION_ILL_STATE_CHANGE"));
-        boolean lights = carLightsOn();
-        android.util.Log.d("CarLights", "onResume lights=" + lights);
-        carLights.setAlpha(lights ? 1f : 0f);
-        car.setAlpha(lights ? 0f : 1f);
+        updateCarLights(true);
+        radioHint.setText(AppLinks.label(this, AppLinks.RADIO));
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
         }
         handler.post(periodic);
-        handler.post(radioPoll);
         nowPlaying.addListener(this);
         onNowPlayingChanged();
     }
@@ -466,21 +453,13 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
     @Override
     protected void onPause() {
         super.onPause();
-        unregisterReceiver(illReceiver);
         handler.removeCallbacks(periodic);
-        handler.removeCallbacks(radioPoll);
         nowPlaying.removeListener(this);
     }
 
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
         if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) fetchWeather(true);
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        radio.unbind(this);
     }
 
     private TextView left(TextView tv) {
