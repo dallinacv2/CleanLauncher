@@ -22,7 +22,7 @@ import java.util.Calendar;
 
 public class MainActivity extends Activity implements NowPlaying.Listener {
 
-    private static final String NAME = "Jhon";
+    private static final String NAME = "Darlin";
 
     private static final String MAPS = "com.google.android.apps.maps/com.google.android.maps.MapsActivity";
     private static final String EQ = "com.nwd.audioset/.home_horizontalActivity";
