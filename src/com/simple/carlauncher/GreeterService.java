@@ -19,8 +19,8 @@ import java.util.List;
 /**
  * Spoken welcome: a few minutes after the launcher is opened it says a greeting, the current
  * weather, the oil reminder (when due), the seat-belt reminder and "drive carefully".
- * It speaks again only when at least {@link #MIN_INTERVAL_MS} have passed since the last greeting
- * (for example after the car was parked for hours).
+ * While the unit is on, the service writes a "still alive" time every minute. When the unit was off
+ * (or asleep) for at least {@link #PARKED_MS}, the next time the launcher opens it greets again.
  *
  * The phrases are pre-rendered clips (res/raw/v_*.mp3) because many head units have no
  * text-to-speech engine.
@@ -31,8 +31,10 @@ public class GreeterService extends Service {
 
     /** How long after the launcher opens before it speaks (2 minutes). */
     private static final long DELAY_MS = 2 * 60 * 1000;
-    /** Minimum time between two greetings (6 hours). */
-    private static final long MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
+    /** If the unit was off/asleep this long (6 hours), greet again on the next start. */
+    private static final long PARKED_MS = 6 * 60 * 60 * 1000;
+    /** How often the "still alive" time is saved. */
+    private static final long HEARTBEAT_MS = 60 * 1000;
 
     private final Handler handler = new Handler();
     private final List<Integer> queue = new ArrayList<>();
@@ -46,12 +48,27 @@ public class GreeterService extends Service {
         audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
     }
 
+    /** Saves the current time every minute while the unit is on. */
+    private final Runnable heartbeat = new Runnable() {
+        public void run() {
+            prefs().edit().putLong("last_alive", System.currentTimeMillis()).apply();
+            handler.postDelayed(this, HEARTBEAT_MS);
+        }
+    };
+
     /** Called every time the launcher comes to the front; decides whether a greeting is due. */
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        long last = prefs().getLong("last_greet", 0);
         long now = System.currentTimeMillis();
-        boolean due = last == 0 || now < last || now - last >= MIN_INTERVAL_MS;
+        long alive = prefs().getLong("last_alive", 0);
+        // First run ever, or the unit was off/asleep for 6 hours or more.
+        if (alive == 0 || (now > alive && now - alive >= PARKED_MS)) {
+            prefs().edit().putBoolean("greet_due", true).apply();
+        }
+        handler.removeCallbacks(heartbeat);
+        heartbeat.run(); // saves "alive" now and keeps saving every minute
+
+        boolean due = prefs().getBoolean("greet_due", false);
         if (due && !pending) {
             pending = true;
             handler.postDelayed(greet, DELAY_MS);
@@ -63,7 +80,8 @@ public class GreeterService extends Service {
 
     private final Runnable greet = () -> {
         pending = false;
-        prefs().edit().putLong("last_greet", System.currentTimeMillis()).apply();
+        prefs().edit().putBoolean("greet_due", false)
+                .putLong("last_greet", System.currentTimeMillis()).apply();
         speak(buildMessage());
     };
 
