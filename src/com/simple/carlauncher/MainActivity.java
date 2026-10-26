@@ -441,6 +441,7 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         updateOil();
         showWeather(Weather.cached(this));
         updateCarLights(true);
+        startService(new Intent(this, GreeterService.class)); // voice greeting (every 6 h at most)
         radioHint.setText(AppLinks.label(this, AppLinks.RADIO));
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);

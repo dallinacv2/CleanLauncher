@@ -18,7 +18,10 @@ en un Hyundai, en República Dominicana. Cambios respecto al original:
   Se toca el botón y, la primera vez, pide elegir la app; con **pulsación larga** se cambia después.
 - Sin el aviso de *pico y placa* (era de Quito).
 - Se dejan de usar las partes exclusivas de los radios NWD: radio FM y Bluetooth por Binder, overlay de volumen,
-  modo pantalla apagada y saludo por voz. Los archivos siguen en el código, pero ya no se inician.
+  y modo pantalla apagada. Los archivos siguen en el código, pero ya no se inician.
+- **Saludo por voz**: unos 2 minutos después de abrir el launcher saluda (según la hora), dice el clima,
+  el aviso de aceite si toca, el cinturón y "maneja con cuidado". No se repite hasta pasadas 6 horas
+  (`DELAY_MS` y `MIN_INTERVAL_MS` en `GreeterService.java`). Baja el volumen de la música mientras habla.
 
 ### Instalar en el radio sin computadora de desarrollo
 

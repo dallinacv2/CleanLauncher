@@ -4,9 +4,9 @@ import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.IBinder;
@@ -17,133 +17,52 @@ import java.util.Calendar;
 import java.util.List;
 
 /**
- * Spoken welcome ~20 s after the car is switched on: greeting, current weather,
- * seat-belt reminder and "drive carefully".
+ * Spoken welcome: a few minutes after the launcher is opened it says a greeting, the current
+ * weather, the oil reminder (when due), the seat-belt reminder and "drive carefully".
+ * It speaks again only when at least {@link #MIN_INTERVAL_MS} have passed since the last greeting
+ * (for example after the car was parked for hours).
  *
- * The phrases are pre-rendered clips (res/raw/v_*.mp3) because the head unit has no
- * text-to-speech engine. The launcher is listed in /nwdappconfig/app/NaviSound.ini so the
- * NWD kernel mixes this audio over the radio/music like navigation prompts.
+ * The phrases are pre-rendered clips (res/raw/v_*.mp3) because many head units have no
+ * text-to-speech engine.
  */
 public class GreeterService extends Service {
 
     private static final String TAG = "Greeter";
-    private static final long DELAY_MS = 20_000;
-    private static final long MIN_INTERVAL_MS = 60_000; // only skip duplicate wake signals
 
-    // MCU source ids (ApplicationList.xml "Source") of the last audio source before ACC off.
-    private static final int SRC_RADIO = 4, SRC_BT = -125, SRC_USB = -128;
+    /** How long after the launcher opens before it speaks (2 minutes). */
+    private static final long DELAY_MS = 2 * 60 * 1000;
+    /** Minimum time between two greetings (6 hours). */
+    private static final long MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
     private final Handler handler = new Handler();
     private final List<Integer> queue = new ArrayList<>();
-    private final RadioClient radio = new RadioClient();
     private MediaPlayer player;
-    private boolean waitingForPhone;
+    private boolean pending;
+    private AudioManager audio;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        radio.bind(this);
-        IntentFilter f = new IntentFilter();
-        f.addAction("com.nwd.action.ACTION_MCU_STATE_CHANGE"); // ACC off (3) / on (1)
-        f.addAction("com.bt.ACTION_A2DP_ESTABLISHED");
-        f.addAction("com.bt.ACTION_AVRCP_ESTABLISHED");
-        f.addAction("com.bt.ACTION_BT_MUSIC_PLAY");
-        f.addAction("com.simple.carlauncher.TEST_CAR_ON"); // adb test hook
-        registerReceiver(events, f);
-        // Right after boot, bring the last source back and greet. A plain restart of this app
-        // (update, crash) must not touch the audio.
-        if (android.os.SystemClock.elapsedRealtime() < 3 * 60_000) {
-            handler.postDelayed(this::restoreAudio, 4000);
-            schedule();
-        }
+        audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
     }
 
+    /** Called every time the launcher comes to the front; decides whether a greeting is due. */
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        long last = prefs().getLong("last_greet", 0);
+        long now = System.currentTimeMillis();
+        boolean due = last == 0 || now < last || now - last >= MIN_INTERVAL_MS;
+        if (due && !pending) {
+            pending = true;
+            handler.postDelayed(greet, DELAY_MS);
+            Weather.fetch(this, w -> { }); // refresh the cache before speaking
+            Log.d(TAG, "greeting scheduled in " + DELAY_MS / 1000 + " s");
+        }
         return START_STICKY;
     }
 
-    private final BroadcastReceiver events = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context c, Intent i) {
-            String a = i.getAction();
-            if ("com.nwd.action.ACTION_MCU_STATE_CHANGE".equals(a)) {
-                int state = i.getByteExtra("extra_mcu_state", (byte) -1);
-                Log.d(TAG, "mcu_state=" + state);
-                if (state == 3) onCarOff();
-                else if (state == 1) onCarOn();
-            } else if ("com.simple.carlauncher.TEST_CAR_ON".equals(a)) {
-                onCarOn();
-            } else if ("com.bt.ACTION_BT_MUSIC_PLAY".equals(a)) {
-                // The phone started music: make Bluetooth the source so the radio stops
-                // instead of both playing at once.
-                waitingForPhone = false;
-                int src = android.provider.Settings.System.getInt(getContentResolver(), "mcu_current_source", 0);
-                if (src != SRC_BT) {
-                    Log.d(TAG, "BT music started while source=" + src + ", switching to Bluetooth");
-                    Ui.requestSource(GreeterService.this, Ui.SOURCE_BT_MUSIC);
-                }
-            } else if (waitingForPhone) {
-                // Phone connected after ACC on: resume Bluetooth music.
-                waitingForPhone = false;
-                handler.postDelayed(() -> startBluetoothMusic(), 2500);
-            }
-        }
-    };
-
-    // ---------- Keep the audio source across ACC off/on ----------
-
-    /**
-     * The NWD kernel restores the foreground app on ACC on. With this launcher in front that is
-     * "no source", so the radio/BT would stay silent. Remember the real source ourselves.
-     */
-    private void onCarOff() {
-        int src = android.provider.Settings.System.getInt(getContentResolver(), "mcu_current_source", 0);
-        NowPlaying np = NowPlaying.get(this);
-        boolean btPlaying = np.track(NowPlaying.Source.BT).playing;
-        if (btPlaying) src = SRC_BT;
-        prefs().edit().putInt("last_source", src).apply();
-        Log.d(TAG, "car off, last source=" + src);
-    }
-
-    private void onCarOn() {
-        handler.postDelayed(this::restoreAudio, 3000);
-        schedule();
-    }
-
-    private void restoreAudio() {
-        int src = prefs().getInt("last_source",
-                android.provider.Settings.System.getInt(getContentResolver(), "mcu_current_source", 0));
-        Log.d(TAG, "restore audio source=" + src);
-        if (NowPlaying.get(this).track(NowPlaying.Source.BT).playing) {
-            Ui.requestSource(this, Ui.SOURCE_BT_MUSIC); // phone already playing: keep Bluetooth
-        } else if (src == SRC_RADIO) {
-            Ui.requestSource(this, Ui.SOURCE_RADIO);
-            handler.postDelayed(() -> radio.wakeTuner(this), 800);
-        } else if (src == SRC_BT) {
-            if (NowPlaying.get(this).btClient.isPhoneConnected()) startBluetoothMusic();
-            else waitingForPhone = true; // wait for the phone to connect
-        } else if (src == SRC_USB) {
-            Ui.requestSource(this, Ui.SOURCE_MUSIC);
-        }
-    }
-
-    private void startBluetoothMusic() {
-        Ui.requestSource(this, Ui.SOURCE_BT_MUSIC);
-        handler.postDelayed(() -> NowPlaying.get(this).btClient.playControl(BtClient.PLAY), 1500);
-    }
-
-    // ---------- Greeting ----------
-
-    private void schedule() {
-        long last = prefs().getLong("last_greet", 0);
-        if (System.currentTimeMillis() - last < MIN_INTERVAL_MS) return;
-        handler.removeCallbacks(greet);
-        handler.postDelayed(greet, DELAY_MS);
-        Weather.fetch(this, w -> { }); // refresh the cache before speaking
-    }
-
     private final Runnable greet = () -> {
+        pending = false;
         prefs().edit().putLong("last_greet", System.currentTimeMillis()).apply();
         speak(buildMessage());
     };
@@ -154,9 +73,7 @@ public class GreeterService extends Service {
         int day = now.get(Calendar.DAY_OF_WEEK);
         int h = now.get(Calendar.HOUR_OF_DAY);
 
-        // Monday: "¡Hola, papacito! Hoy es lunes." Other days: greeting by time of day.
-        if (day == Calendar.MONDAY) clips.add("v_greet_monday");
-        else clips.add(h < 12 ? "v_greet_morning" : h < 19 ? "v_greet_afternoon" : "v_greet_night");
+        clips.add(h < 12 ? "v_greet_morning" : h < 19 ? "v_greet_afternoon" : "v_greet_night");
 
         Weather w = Weather.cached(this);
         if (w != null) {
@@ -197,6 +114,9 @@ public class GreeterService extends Service {
             if (id != 0) queue.add(id);
         }
         Log.d(TAG, "speaking " + clips);
+        // Lower the music/radio while the voice talks.
+        audio.requestAudioFocus(focus -> { }, AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK);
         playNext();
     }
 
@@ -205,7 +125,10 @@ public class GreeterService extends Service {
             player.release();
             player = null;
         }
-        if (queue.isEmpty()) return;
+        if (queue.isEmpty()) {
+            audio.abandonAudioFocus(focus -> { });
+            return;
+        }
         int id = queue.remove(0);
         player = new MediaPlayer();
         try {
@@ -235,8 +158,6 @@ public class GreeterService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        unregisterReceiver(events);
-        radio.unbind(this);
         handler.removeCallbacksAndMessages(null);
         if (player != null) player.release();
     }
@@ -246,11 +167,10 @@ public class GreeterService extends Service {
         return null;
     }
 
-    /** Starts the service at boot even if the launcher is not shown yet. */
+    /** Starts the GPS odometer at boot even if the launcher is not shown yet. */
     public static class BootReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context c, Intent i) {
-            // Greeter and volume overlay only work on NWD radios, so they are not started here.
             c.startService(new Intent(c, Odometer.class));
         }
     }
