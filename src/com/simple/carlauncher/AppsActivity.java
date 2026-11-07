@@ -70,7 +70,7 @@ public class AppsActivity extends Activity {
         root.addView(header);
 
         GridView grid = new GridView(this);
-        grid.setNumColumns(6);
+        grid.setNumColumns(5);
         grid.setVerticalSpacing(dp(8));
         grid.setPadding(0, dp(16), 0, dp(16));
         grid.setClipToPadding(false);
@@ -135,11 +135,11 @@ public class AppsActivity extends Activity {
             item = new LinearLayout(this);
             item.setOrientation(LinearLayout.VERTICAL);
             item.setGravity(Gravity.CENTER_HORIZONTAL);
-            item.setPadding(dp(6), dp(14), dp(6), dp(14));
+            item.setPadding(dp(6), dp(12), dp(6), dp(12));
             icon = new ImageView(this);
-            item.addView(icon, new LinearLayout.LayoutParams(dp(64), dp(64)));
+            item.addView(icon, new LinearLayout.LayoutParams(dp(88), dp(88)));
             label = new TextView(this);
-            label.setTextSize(14);
+            label.setTextSize(17);
             label.setTextColor(0xE6FFFFFF);
             label.setGravity(Gravity.CENTER);
             label.setSingleLine(true);
