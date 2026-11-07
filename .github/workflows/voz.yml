@@ -1,0 +1,43 @@
+name: Generar voces
+
+# Se ejecuta a mano desde la pestaña "Actions". Lee tools/frases.json, genera los audios
+# con la voz Salome, los guarda en res/raw y vuelve a compilar el APK.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  voz:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar edge-tts
+        run: pip install edge-tts
+
+      - name: Generar los audios
+        run: python tools/gen_voice.py
+
+      - name: Guardar los audios y compilar el APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add res/raw
+          if git diff --cached --quiet; then
+            echo "Los audios no cambiaron."
+            exit 0
+          fi
+          git commit -m "Regenerar los audios del saludo con el nombre"
+          git push
+          gh workflow run build.yml
