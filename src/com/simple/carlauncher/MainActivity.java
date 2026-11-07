@@ -396,7 +396,8 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
 
         dock.addView(dockIcon(R.drawable.ic_music, AppLinks.MUSIC), weight(1f, 0));
         dock.addView(dockIcon(R.drawable.ic_settings, AppLinks.EQ), weight(1f, 0));
-        dock.addView(dockIcon(R.drawable.ic_gear, this::openSettings, null), weight(1f, 0));
+        // Tap: system settings. Long press: look for an app update now.
+        dock.addView(dockIcon(R.drawable.ic_gear, this::openSettings, () -> Updater.check(this, true)), weight(1f, 0));
         return dock;
     }
 
@@ -443,6 +444,7 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         updateCarLights(true);
         startService(new Intent(this, GreeterService.class)); // voice greeting (every 6 h at most)
         startService(new Intent(this, Odometer.class)); // no-op if already running; retries the GPS
+        Updater.checkAuto(this); // looks for a new version (at most every 12 h)
         radioHint.setText(AppLinks.label(this, AppLinks.RADIO));
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);

@@ -9,6 +9,11 @@ on:
 permissions:
   contents: write   # para publicar el APK en la versión "latest"
 
+# Una compilación a la vez: así nunca se crean dos llaves de firma a la vez.
+concurrency:
+  group: compilar-apk
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,6 +27,45 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Cada compilación sube el número de versión; la app lo usa para saber si hay algo nuevo.
+      - name: Número de versión
+        run: |
+          echo "VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=1.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+
+      # Para actualizar la app encima de sí misma, todos los APK deben ir firmados con la misma
+      # llave. La primera vez se crea y se guarda en una versión BORRADOR llamada "llave-de-firma"
+      # (los borradores solo los ve el dueño del repo, no el público). Las siguientes veces se reutiliza.
+      # No la borres: si se pierde, hay que desinstalar la app una vez para instalar la nueva llave.
+      - name: Preparar la llave de firma
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -e
+          KS="$RUNNER_TEMP/clean.jks"
+          ID=$(gh api "repos/$REPO/releases?per_page=100" \
+            --jq '[.[] | select(.draft == true and (.tag_name == "llave-de-firma" or .name == "llave-de-firma"))][0].id // empty')
+          if [ -n "$ID" ]; then
+            echo "Usando la llave guardada."
+            ASSET=$(gh api "repos/$REPO/releases/$ID" --jq '.assets[] | select(.name == "clean.jks") | .id')
+            [ -n "$ASSET" ] || { echo "::error::La versión borrador existe pero no tiene clean.jks"; exit 1; }
+            gh api -H "Accept: application/octet-stream" "repos/$REPO/releases/assets/$ASSET" > "$KS"
+            PASS=$(gh api "repos/$REPO/releases/$ID" --jq '.body')
+          else
+            echo "Creando la llave de firma (solo la primera vez)."
+            PASS=$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)
+            keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" \
+              -alias cleanlauncher -keyalg RSA -keysize 2048 -validity 36500 \
+              -dname "CN=Clean Launcher,O=Darlin,C=DO" >/dev/null 2>&1
+            gh release create llave-de-firma "$KS" --draft --title "llave-de-firma" \
+              --notes "$PASS" --target "${{ github.sha }}"
+          fi
+          [ -s "$KS" ] && [ -n "$PASS" ] || { echo "::error::No se pudo preparar la llave"; exit 1; }
+          echo "::add-mask::$PASS"
+          echo "KS_FILE=$KS" >> "$GITHUB_ENV"
+          echo "KS_PASS=$PASS" >> "$GITHUB_ENV"
+
       - name: Compilar el APK
         run: sh build-ci.sh
 
@@ -34,6 +78,7 @@ jobs:
 
       # Enlace directo y fijo al APK:
       # https://github.com/dallinacv2/CleanLauncher/releases/download/latest/CarLauncher.apk
+      # La app lee version.txt de la misma versión para saber si hay una actualización.
       - name: Publicar el APK en la versión "latest"
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,3 +86,5 @@ jobs:
           gh release view latest >/dev/null 2>&1 || gh release create latest \
             --title "Última versión" --notes "APK más reciente de Clean Launcher." --target "${{ github.sha }}"
           gh release upload latest build/CarLauncher.apk --clobber
+          printf 'versionCode=%s\nversionName=%s\n' "$VERSION_CODE" "$VERSION_NAME" > build/version.txt
+          gh release upload latest build/version.txt --clobber

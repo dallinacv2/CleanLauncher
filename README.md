@@ -26,11 +26,22 @@ en un Hyundai, en República Dominicana. Cambios respecto al original:
 
 ### Instalar en el radio sin computadora de desarrollo
 
-1. En GitHub, pestaña **Actions** → **Compilar APK** → última ejecución → **CarLauncher-APK** (descarga un zip con el `.apk`).
-2. Copiar `CarLauncher.apk` a una memoria USB y abrirlo desde el administrador de archivos del radio
+1. Descargar el APK directo (siempre la última versión):
+   <https://github.com/dallinacv2/CleanLauncher/releases/download/latest/CarLauncher.apk>
+2. Abrirlo desde el administrador de archivos del radio, o copiarlo a una memoria USB
    (puede pedir permitir instalar apps de fuentes desconocidas).
 3. Para que el launcher use la hora y el clima: dar permiso de **ubicación** cuando lo pida y, en Ajustes del radio,
    activar el **acceso a notificaciones** para "Inicio" (así muestra la canción que suena).
+
+### Actualizaciones dentro de la app
+
+Cada vez que cambia el código, GitHub compila y publica el APK con un número de versión nuevo. La app lo revisa sola
+(máximo cada 12 horas, al abrir el launcher) y, si hay uno nuevo, pregunta si quieres instalarlo. También se puede
+buscar a mano con una **pulsación larga en el engranaje** del menú de abajo.
+
+Todos los APK se firman con la misma llave, creada la primera vez y guardada en una versión **borrador** llamada
+`llave-de-firma` (solo la ve el dueño del repo). **No la borres**: sin ella, Android no deja instalar una versión
+encima de otra y habría que desinstalar la app una vez.
 
 **No desinstalar el launcher de fábrica**: así siempre se puede volver a él y se conservan los botones del volante
 y la cámara de reversa.
