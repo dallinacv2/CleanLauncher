@@ -67,7 +67,7 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         cards.addView(buildMusicCard(), weight(1.05f, dp(12)));
         root.addView(cards, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        root.addView(buildDock(), new LinearLayout.LayoutParams(-1, dp(84)));
+        root.addView(buildDock(), new LinearLayout.LayoutParams(-1, dp(100)));
         setContentView(root);
 
         nowPlaying = NowPlaying.get(this);
@@ -389,7 +389,7 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
 
         FrameLayout center = new FrameLayout(this);
         RingView ring = new RingView(this);
-        center.addView(ring, new FrameLayout.LayoutParams(dp(64), dp(64), Gravity.CENTER));
+        center.addView(ring, new FrameLayout.LayoutParams(dp(76), dp(76), Gravity.CENTER));
         Ui.pressable(ring, 0.88f);
         ring.setOnClickListener(v -> startActivity(new Intent(this, AppsActivity.class)));
         dock.addView(center, weight(1f, 0));
@@ -410,8 +410,8 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         ImageView iv = new ImageView(this);
         iv.setImageResource(icon);
         iv.setColorFilter(0xE6FFFFFF);
-        iv.setPadding(dp(12), dp(12), dp(12), dp(12));
-        f.addView(iv, new FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER));
+        iv.setPadding(dp(10), dp(10), dp(10), dp(10));
+        f.addView(iv, new FrameLayout.LayoutParams(dp(80), dp(80), Gravity.CENTER)); // icon drawn at 60 dp
         Ui.pressable(iv, 0.85f);
         iv.setOnClickListener(v -> action.run());
         if (longAction != null) {
