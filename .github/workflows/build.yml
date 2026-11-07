@@ -6,6 +6,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write   # para publicar el APK en la versión "latest"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,3 +31,13 @@ jobs:
           name: CarLauncher-APK
           path: build/CarLauncher.apk
           if-no-files-found: error
+
+      # Enlace directo y fijo al APK:
+      # https://github.com/dallinacv2/CleanLauncher/releases/download/latest/CarLauncher.apk
+      - name: Publicar el APK en la versión "latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest >/dev/null 2>&1 || gh release create latest \
+            --title "Última versión" --notes "APK más reciente de Clean Launcher." --target "${{ github.sha }}"
+          gh release upload latest build/CarLauncher.apk --clobber
