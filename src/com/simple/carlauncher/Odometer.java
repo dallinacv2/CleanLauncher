@@ -1,6 +1,9 @@
 package com.simple.carlauncher;
 
 import android.Manifest;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
@@ -9,6 +12,7 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
@@ -25,26 +29,62 @@ public class Odometer extends Service implements LocationListener {
     static final int DEFAULT_INTERVAL_KM = 5000;
     static final int WARN_KM = 500;
 
+    private static final String CHANNEL = "odometer";
+    private static final int NOTIF_ID = 42;
+
     private LocationManager lm;
     private Location last;
     private float pendingMeters;
+    private boolean listening;
 
     @Override
     public void onCreate() {
         super.onCreate();
         lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            try {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000, 10, this);
-            } catch (Exception e) {
-                Log.w(TAG, "no GPS", e);
-            }
-        }
+        goForeground();
+        startListening();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // Every start (e.g. after the user grants the location permission) retries the GPS
+        // registration. Before, it was only tried once in onCreate(), so when the permission was
+        // granted after the service had started the odometer never received a single fix.
+        goForeground();
+        startListening();
         return START_STICKY;
+    }
+
+    /**
+     * Runs as a foreground service so Android does not stop it (or throttle the GPS) as soon as
+     * another app, such as the navigation app, is in front of the launcher.
+     */
+    private void goForeground() {
+        try {
+            Notification.Builder b;
+            if (Build.VERSION.SDK_INT >= 26) {
+                NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Odómetro GPS", NotificationManager.IMPORTANCE_MIN));
+                b = new Notification.Builder(this, CHANNEL);
+            } else {
+                b = new Notification.Builder(this);
+            }
+            b.setSmallIcon(R.drawable.ic_apps).setContentTitle("Odómetro GPS activo").setOngoing(true);
+            startForeground(NOTIF_ID, b.build());
+        } catch (Exception e) {
+            Log.w(TAG, "no foreground", e);
+        }
+    }
+
+    private void startListening() {
+        if (listening) return;
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
+        try {
+            lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000, 10, this);
+            listening = true;
+        } catch (Exception e) {
+            Log.w(TAG, "no GPS", e);
+        }
     }
 
     @Override
@@ -74,6 +114,12 @@ public class Odometer extends Service implements LocationListener {
     public void onDestroy() {
         super.onDestroy();
         lm.removeUpdates(this);
+        listening = false;
+        if (pendingMeters > 0) { // do not lose the last stretch driven
+            SharedPreferences p = prefs(this);
+            p.edit().putFloat("gps_km", p.getFloat("gps_km", 0) + pendingMeters / 1000f).apply();
+            pendingMeters = 0;
+        }
     }
 
     @Override

@@ -189,7 +189,9 @@ public class GreeterService extends Service {
     public static class BootReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context c, Intent i) {
-            c.startService(new Intent(c, Odometer.class));
+            Intent svc = new Intent(c, Odometer.class);
+            if (android.os.Build.VERSION.SDK_INT >= 26) c.startForegroundService(svc);
+            else c.startService(svc);
         }
     }
 }

@@ -442,6 +442,7 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         showWeather(Weather.cached(this));
         updateCarLights(true);
         startService(new Intent(this, GreeterService.class)); // voice greeting (every 6 h at most)
+        startService(new Intent(this, Odometer.class)); // no-op if already running; retries the GPS
         radioHint.setText(AppLinks.label(this, AppLinks.RADIO));
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
@@ -460,7 +461,10 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
-        if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) fetchWeather(true);
+        if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+            fetchWeather(true);
+            startService(new Intent(this, Odometer.class)); // the odometer needs the GPS permission too
+        }
     }
 
     private TextView left(TextView tv) {
