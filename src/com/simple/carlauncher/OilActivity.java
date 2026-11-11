@@ -63,7 +63,8 @@ public class OilActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER);
         card.setPadding(dp(28), dp(20), dp(28), dp(20));
-        statusBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0x993FA9FF, 0x667B4DFF});
+        statusBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                Ui.pick(this, new int[]{0x993FA9FF, 0x667B4DFF}, new int[]{0xFF1E1E28, 0xFF121218}));
         statusBg.setCornerRadius(dp(18));
         card.setBackground(statusBg);
 
@@ -196,7 +197,7 @@ public class OilActivity extends Activity {
             bar.setProgress(Math.max(0, Math.min(1000, (interval - rem) * 1000 / Math.max(1, interval))));
             statusBg.setColors(rem < 0 ? new int[]{0xCCE53935, 0x99B71C1C}
                     : rem <= Odometer.WARN_KM ? new int[]{0xCCFF9800, 0x99E65100}
-                    : new int[]{0x993FA9FF, 0x667B4DFF});
+                    : Ui.pick(this, new int[]{0x993FA9FF, 0x667B4DFF}, new int[]{0xFF1E1E28, 0xFF121218}));
         }
         for (int i = 0; i < INTERVALS.length; i++) {
             GradientDrawable bg = new GradientDrawable();

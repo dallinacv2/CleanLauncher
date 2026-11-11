@@ -54,7 +54,6 @@ public class RadioActivity extends Activity {
 
         setContentView(root);
         radio.bind(this);
-        Ui.requestSource(this, Ui.SOURCE_RADIO);
     }
 
     private View buildTopBar() {
@@ -231,6 +230,10 @@ public class RadioActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Coming from Bluetooth/USB: switch to the radio and wake the tuner.
+        if (!Ui.radioIsSource(this) || !radio.isConnected()) {
+            handler.postDelayed(() -> Ui.selectRadio(this, radio), 300);
+        }
         handler.post(poll);
     }
 

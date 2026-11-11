@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
@@ -82,8 +83,26 @@ public class GreeterService extends Service {
         pending = false;
         prefs().edit().putBoolean("greet_due", false)
                 .putLong("last_greet", System.currentTimeMillis()).apply();
-        speak(buildMessage());
+        if (!Profile.voiceEnabled(this)) return;
+        List<String> clips = buildMessage();
+        // Owner's build ships recorded clips; shared builds speak with the device's TTS engine.
+        if (getResources().getIdentifier("v_careful", "raw", getPackageName()) != 0) speak(clips);
+        else speakTts(Speech.text(this, clips));
     };
+
+    private android.speech.tts.TextToSpeech tts;
+
+    private void speakTts(String text) {
+        if (tts != null) tts.shutdown();
+        tts = new android.speech.tts.TextToSpeech(this, status -> {
+            if (status != android.speech.tts.TextToSpeech.SUCCESS) return;
+            java.util.Locale es = new java.util.Locale("es", "US");
+            if (tts.isLanguageAvailable(es) < 0) es = new java.util.Locale("es");
+            tts.setLanguage(es);
+            Bundle params = new Bundle();
+            tts.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, params, "greet");
+        });
+    }
 
     private List<String> buildMessage() {
         List<String> clips = new ArrayList<>();
@@ -175,6 +194,7 @@ public class GreeterService extends Service {
 
     @Override
     public void onDestroy() {
+        if (tts != null) tts.shutdown();
         super.onDestroy();
         handler.removeCallbacksAndMessages(null);
         if (player != null) player.release();

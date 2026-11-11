@@ -9,3 +9,6 @@ nwd/
 *.keystore
 .vscode/
 .idea/
+
+# Llave de firma de las versiones para compartir (no subir nunca)
+keys/

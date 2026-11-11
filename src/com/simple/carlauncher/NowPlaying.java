@@ -220,7 +220,14 @@ final class NowPlaying {
     void playPause() {
         Source s = current();
         if (s == Source.BT) {
-            btClient.playControl(bt.playing ? BtClient.PAUSE : BtClient.PLAY);
+            if (Ui.radioIsSource(ctx)) {
+                // Radio has the speakers (the phone may even be playing muted): bring Bluetooth in.
+                Ui.userChoseRadioAt = 0;
+                Ui.selectBluetooth(ctx);
+                btClient.playControl(BtClient.PLAY);
+            } else {
+                btClient.playControl(bt.playing ? BtClient.PAUSE : BtClient.PLAY);
+            }
         } else if (s == Source.APP && controller != null) {
             if (app.playing) controller.getTransportControls().pause();
             else controller.getTransportControls().play();

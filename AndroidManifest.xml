@@ -64,6 +64,22 @@
         <receiver android:name=".InstallReceiver" android:exported="false" />
 
         <activity
+            android:name=".SetupActivity"
+            android:label="Configurar"
+            android:windowSoftInputMode="adjustPan"
+            android:configChanges="orientation|screenSize|keyboardHidden|locale" />
+
+        <activity
+            android:name=".EqActivity"
+            android:label="Ecualizador"
+            android:configChanges="orientation|screenSize|keyboardHidden|locale" />
+
+        <activity
+            android:name=".BtDevicesActivity"
+            android:label="Dispositivos"
+            android:configChanges="orientation|screenSize|keyboardHidden|locale" />
+
+        <activity
             android:name=".OilActivity"
             android:label="Aceite"
             android:configChanges="orientation|screenSize|keyboardHidden|locale" />

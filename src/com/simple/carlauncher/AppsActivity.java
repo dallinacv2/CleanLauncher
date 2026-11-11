@@ -43,8 +43,7 @@ public class AppsActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(24), dp(16), dp(24), 0);
-        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFF1B2C8C, 0xFF20206E, 0xFF371764}));
+        root.setBackground(Ui.background(this));
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -66,7 +65,41 @@ public class AppsActivity extends Activity {
         title.setTextSize(26);
         title.setTextColor(Color.WHITE);
         title.setPadding(dp(18), 0, 0, 0);
-        header.addView(title);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        // Theme switch: Auto (dark with car lights / at night) -> Light -> Dark.
+        TextView theme = new TextView(this);
+        theme.setTextSize(16);
+        theme.setTextColor(Color.WHITE);
+        theme.setPadding(dp(18), dp(10), dp(18), dp(10));
+        GradientDrawable tbg = new GradientDrawable();
+        tbg.setColor(0x33FFFFFF);
+        tbg.setCornerRadius(dp(22));
+        theme.setBackground(tbg);
+        theme.setText(themeLabel());
+        MainActivity.pressable(theme);
+        theme.setOnClickListener(v -> {
+            String m = Ui.themeMode(this);
+            Ui.setThemeMode(this, Ui.THEME_AUTO.equals(m) ? Ui.THEME_LIGHT
+                    : Ui.THEME_LIGHT.equals(m) ? Ui.THEME_DARK : Ui.THEME_AUTO);
+            recreate();
+        });
+        header.addView(theme);
+
+        TextView setup = new TextView(this);
+        setup.setText("Configurar");
+        setup.setTextSize(16);
+        setup.setTextColor(Color.WHITE);
+        setup.setPadding(dp(18), dp(10), dp(18), dp(10));
+        GradientDrawable sbg = new GradientDrawable();
+        sbg.setColor(0x33FFFFFF);
+        sbg.setCornerRadius(dp(22));
+        setup.setBackground(sbg);
+        MainActivity.pressable(setup);
+        setup.setOnClickListener(v -> startActivity(new android.content.Intent(this, SetupActivity.class)));
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-2, -2);
+        slp.leftMargin = dp(8);
+        header.addView(setup, slp);
         root.addView(header);
 
         GridView grid = new GridView(this);
@@ -155,6 +188,11 @@ public class AppsActivity extends Activity {
         icon.setImageDrawable(ri.loadIcon(pm));
         label.setText(ri.loadLabel(pm));
         return item;
+    }
+
+    private String themeLabel() {
+        String m = Ui.themeMode(this);
+        return Ui.THEME_DARK.equals(m) ? "Tema: Oscuro" : Ui.THEME_LIGHT.equals(m) ? "Tema: Claro" : "Tema: Automático";
     }
 
     private int dp(int v) {

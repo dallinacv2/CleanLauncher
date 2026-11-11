@@ -125,6 +125,138 @@ public class BtClient implements ServiceConnection {
         }
     }
 
+    // ---------- Device management ----------
+
+    private static final int TX_CONNECT_DEVICE = 4;
+    private static final int TX_DISCONNECT_DEVICE = 5;
+    private static final int TX_START_SEARCH = 7;
+    private static final int TX_STOP_SEARCH = 8;
+    private static final int TX_SET_LOCAL_NAME = 9;
+    private static final int TX_GET_LOCAL_NAME = 10;
+    private static final int TX_SET_PIN = 11;
+    private static final int TX_GET_PIN = 12;
+    private static final int TX_GET_PAIR_RECORDS = 31;
+    private static final int TX_DELETE_PAIR_RECORD = 32;
+
+    /** Results arrive as one com.bt.ACTION_GET_PAIR_DEVICE_RECORD broadcast per phone. */
+    public void requestPairedDevices() {
+        callBool(TX_GET_PAIR_RECORDS);
+    }
+
+    /** Results arrive as com.bt.ACTION_BT_DEVICE_FOUND, then ACTION_BT_DISCOVER_FINISH. */
+    public void startSearch() {
+        callBool(TX_START_SEARCH);
+    }
+
+    public void stopSearch() {
+        callBool(TX_STOP_SEARCH);
+    }
+
+    public boolean connect(com.bt.BTDevice d) {
+        if (!isBound()) return false;
+        Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(DESCRIPTOR);
+            data.writeInt(1);
+            d.writeToParcel(data, 0);
+            binder.transact(TX_CONNECT_DEVICE, data, reply, 0);
+            reply.readException();
+            return reply.readInt() != 0;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            data.recycle();
+            reply.recycle();
+        }
+    }
+
+    public void disconnect() {
+        callBool(TX_DISCONNECT_DEVICE);
+    }
+
+    public void deletePaired(int recordIndex) {
+        callWithInt(TX_DELETE_PAIR_RECORD, recordIndex);
+    }
+
+    /** Address of the connected phone, or null. */
+    public String connectedAddress() {
+        if (!isBound()) return null;
+        Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(DESCRIPTOR);
+            binder.transact(TX_GET_CONNECT_DEVICE, data, reply, 0);
+            reply.readException();
+            return reply.readInt() == 0 ? null : reply.readString();
+        } catch (Exception e) {
+            return null;
+        } finally {
+            data.recycle();
+            reply.recycle();
+        }
+    }
+
+    public String localName() {
+        return callString(TX_GET_LOCAL_NAME);
+    }
+
+    public String pinCode() {
+        return callString(TX_GET_PIN);
+    }
+
+    public void setLocalName(String name) {
+        callWithString(TX_SET_LOCAL_NAME, name);
+    }
+
+    public void setPinCode(String pin) {
+        callWithString(TX_SET_PIN, pin);
+    }
+
+    private String callString(int code) {
+        if (!isBound()) return null;
+        Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(DESCRIPTOR);
+            binder.transact(code, data, reply, 0);
+            reply.readException();
+            return reply.readString();
+        } catch (Exception e) {
+            return null;
+        } finally {
+            data.recycle();
+            reply.recycle();
+        }
+    }
+
+    private void callWithString(int code, String arg) {
+        if (!isBound()) return;
+        Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(DESCRIPTOR);
+            data.writeString(arg);
+            binder.transact(code, data, reply, 0);
+            reply.readException();
+        } catch (Exception ignored) {
+        } finally {
+            data.recycle();
+            reply.recycle();
+        }
+    }
+
+    private void callWithInt(int code, int arg) {
+        if (!isBound()) return;
+        Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(DESCRIPTOR);
+            data.writeInt(arg);
+            binder.transact(code, data, reply, 0);
+            reply.readException();
+        } catch (Exception ignored) {
+        } finally {
+            data.recycle();
+            reply.recycle();
+        }
+    }
+
     private boolean callBool(int code) {
         if (!isBound()) return false;
         Parcel data = Parcel.obtain(), reply = Parcel.obtain();

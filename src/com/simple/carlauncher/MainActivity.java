@@ -22,7 +22,6 @@ import java.util.Calendar;
 
 public class MainActivity extends Activity implements NowPlaying.Listener {
 
-    private static final String NAME = "Darlin";
 
     // The car lights picture turns on at 19:00 and off at 06:30 (minutes since midnight).
     private static final int LIGHTS_ON_MIN = 19 * 60;
@@ -37,7 +36,14 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
     private ImageView weatherIcon;
     private GradientDrawable weatherBg;
     private ImageView car, carLights;
+    private boolean hasLightsImage;
     private TextView oilInfo;
+    private boolean createdDark;
+    private String createdProfile;
+
+    private String profileStamp() {
+        return Profile.name(this) + "|" + Profile.carPhotoFile(this).lastModified();
+    }
     private GradientDrawable oilBg;
     private long lastWeatherFetch;
 
@@ -71,6 +77,14 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         setContentView(root);
 
         nowPlaying = NowPlaying.get(this);
+        createdDark = Ui.isDark(this);
+        createdProfile = profileStamp();
+        // Shared installs: ask for name, car photo and permissions on first start.
+        if (!Profile.isSetupDone(this) && Profile.bundledCar(this, false) == 0) {
+            startActivity(new Intent(this, SetupActivity.class));
+        }
+        if (Profile.isNwd(this)) startService(new Intent(this, VolumeOverlay.class));
+        startService(new Intent(this, GreeterService.class));
         startService(new Intent(this, Odometer.class));
     }
 
@@ -80,12 +94,13 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(26), dp(24), dp(26), dp(22));
-        weatherBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0x993FA9FF, 0x667B4DFF});
+        weatherBg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                Ui.pick(this, new int[]{0x993FA9FF, 0x667B4DFF}, new int[]{0xFF1E1E28, 0xFF121218}));
         weatherBg.setCornerRadius(dp(18));
         weatherBg.setStroke(dp(1), 0x447FD8FF);
         card.setBackground(weatherBg);
 
-        TextView hello = left(Ui.text(this, "Hola, " + NAME, 34, Color.WHITE));
+        TextView hello = left(Ui.text(this, Profile.hello(this), 34, Color.WHITE));
         hello.setTypeface(Typeface.DEFAULT_BOLD);
         card.addView(hello);
 
@@ -94,16 +109,30 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         card.addView(greeting);
 
         // The user's own car (photo with background removed); headlights glow when the car's lights are on.
+        // Own photo (shared builds) > bundled car with lights-on variant (owner's build) > icon.
         FrameLayout carBox = new FrameLayout(this);
         car = new ImageView(this);
-        car.setImageResource(R.drawable.optra);
         car.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        carBox.addView(car, new FrameLayout.LayoutParams(-1, -1));
         carLights = new ImageView(this);
-        carLights.setImageResource(R.drawable.optra_lights);
         carLights.setScaleType(ImageView.ScaleType.FIT_CENTER);
         carLights.setAlpha(0f);
+        android.graphics.Bitmap own = Profile.carPhoto(this);
+        int bundled = Profile.bundledCar(this, false), bundledLights = Profile.bundledCar(this, true);
+        if (own != null) {
+            car.setImageBitmap(own);
+        } else if (bundled != 0) {
+            car.setImageResource(bundled);
+            if (bundledLights != 0) {
+                carLights.setImageResource(bundledLights);
+                hasLightsImage = true;
+            }
+        } else {
+            car.setImageResource(R.drawable.ic_car);
+            car.setColorFilter(0x40FFFFFF);
+        }
+        carBox.addView(car, new FrameLayout.LayoutParams(-1, -1));
         carBox.addView(carLights, new FrameLayout.LayoutParams(-1, -1));
+        carBox.setOnClickListener(v -> startActivity(new Intent(this, SetupActivity.class)));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, 0, 1f);
         clp.setMargins(dp(30), dp(8), dp(30), dp(8));
         card.addView(carBox, clp);
@@ -164,7 +193,8 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
         weatherCity.setText(w.city.isEmpty() ? "Sensación " + w.feelsLike + "°"
                 : w.city + " · Sensación " + w.feelsLike + "°");
         weatherExtra.setText("↑ " + w.max + "°   ↓ " + w.min + "°   💧 " + w.humidity + "%   " + w.wind + " km/h");
-        weatherBg.setColors(w.isDay ? new int[]{0x993FA9FF, 0x667B4DFF} : new int[]{0x8C2A3A9E, 0x80261A6E});
+        weatherBg.setColors(Ui.isDark(this) ? new int[]{0xFF1E1E28, 0xFF121218}
+                : w.isDay ? new int[]{0x993FA9FF, 0x667B4DFF} : new int[]{0x8C2A3A9E, 0x80261A6E});
     }
 
     private void fetchWeather(boolean force) {
@@ -176,6 +206,7 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
 
     private final Runnable periodic = new Runnable() {
         public void run() {
+            if (Ui.isDark(MainActivity.this) != createdDark) recreate();
             updateGreeting();
             updateCarLights(false);
             fetchWeather(false);
@@ -205,6 +236,7 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
 
     private void showCarLights(boolean on) {
         // Cross-fade between the "lights off" and "lights on" photos.
+        if (!hasLightsImage) return;
         carLights.animate().alpha(on ? 1f : 0f).setDuration(600).start();
         car.animate().alpha(on ? 0f : 1f).setDuration(600).start();
     }
@@ -300,7 +332,8 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
     private View buildMusicCard() {
         FrameLayout card = new FrameLayout(this);
         GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFF6A3BFF, 0xFFC04DE8, 0xFF2B1A7A});
+                Ui.pick(this, new int[]{0xFF6A3BFF, 0xFFC04DE8, 0xFF2B1A7A},
+                        new int[]{0xFF2E1A55, 0xFF1A1030, 0xFF0A0A0E}));
         bg.setCornerRadius(dp(18));
         card.setBackground(bg);
         card.setClipToOutline(true);
@@ -438,6 +471,11 @@ public class MainActivity extends Activity implements NowPlaying.Listener {
     @Override
     protected void onResume() {
         super.onResume();
+        if (Ui.isDark(this) != createdDark || !profileStamp().equals(createdProfile)) {
+            // theme (setting, night or car lights) or profile (name, car photo) changed
+            recreate();
+            return;
+        }
         updateGreeting();
         updateOil();
         showWeather(Weather.cached(this));

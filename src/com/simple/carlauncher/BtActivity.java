@@ -70,7 +70,7 @@ public class BtActivity extends Activity implements NowPlaying.Listener {
         statusBg.setColor(0x26FFFFFF);
         status.setBackground(statusBg);
         Ui.pressable(status, 0.94f);
-        status.setOnClickListener(v -> Ui.launch(this, FACTORY_PHONE));
+        status.setOnClickListener(v -> startActivity(new android.content.Intent(this, BtDevicesActivity.class)));
         bar.addView(status);
         return bar;
     }
@@ -78,7 +78,7 @@ public class BtActivity extends Activity implements NowPlaying.Listener {
     private View buildMusic() {
         FrameLayout card = new FrameLayout(this);
         GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFF2E6BFF, 0xFF6A3BFF, 0xFFB04CE8});
+                Ui.pick(this, new int[]{0xFF2E6BFF, 0xFF6A3BFF, 0xFFB04CE8}, new int[]{0xFF1F2A55, 0xFF1A1235, 0xFF0B0B10}));
         bg.setCornerRadius(dp(18));
         card.setBackground(bg);
 
@@ -134,7 +134,7 @@ public class BtActivity extends Activity implements NowPlaying.Listener {
         if (t.playing) {
             bt.playControl(BtClient.PAUSE);
         } else {
-            Ui.requestSource(this, Ui.SOURCE_BT_MUSIC);
+            Ui.selectBluetooth(this);
             bt.playControl(BtClient.PLAY);
         }
     }
